@@ -1,0 +1,23 @@
+# Robostack ROS2
+mamba activate ros_env
+
+export ROS_DOMAIN_ID=112
+
+. ~/ros2_ws/install/setup.bash
+
+function cb {
+    local select_packages=""
+
+    # Check if additional arguments are provided
+    if [ $# -gt 0 ]; then
+        select_packages="--packages-select $*"
+    fi
+
+    # Execute colcon build command with the provided arguments
+    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo $select_packages
+}
+
+export MAX_USER=max1
+export MAX_IP=192.168.50.10
+
+export EDITOR="nano"
