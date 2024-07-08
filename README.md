@@ -17,3 +17,13 @@ Add following to crontab -e
 ```
 https://github.com/RRL-ALeRT/alert_ros2/tree/nuc/spot_driver_plus
 ```
+
+## SSH without password
+First generate key with
+```
+ssh-keygen
+```
+Copy key to the on-board PC
+```
+ssh-copy-id user@host
+```
