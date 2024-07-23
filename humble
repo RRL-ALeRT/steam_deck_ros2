@@ -25,3 +25,5 @@ export GEN3_IP=192.168.50.9
 export EDITOR="nano"
 
 export CMAKE_INCLUDE_PATH=/home/deck/micromamba/envs/ros_env/include:/home/deck/micromamba/pkgs/mesalib-24.0.2-h90bb098_1/include
+
+export LIBVA_DRIVERS_PATH=/usr/lib/dri
