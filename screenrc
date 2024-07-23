@@ -1,0 +1,40 @@
+# Enable mouse scrolling and selecting
+termcapinfo xterm* ti@:te@
+termcapinfo xterm* 'hs:ts=\E]2;:fs=\007:ds=\E]2;screen\007'
+
+# Enable 256 colors
+term screen-256color
+
+# Set a nice status line at the bottom of the screen
+hardstatus alwayslastline
+hardstatus string "%{= wk}%-w%{= BW}%n %t%{-}%+w %-= %{= wr}%LD %d %LM - %c:%s%{-}"
+
+# Enable visual bell and set a nice color for it
+vbell on
+vbell_msg "   \033[41m DING! \033[49m"
+
+# Set the default shell to use within screen (change this to your preferred shell)
+shell /bin/bash
+
+# Set the window title
+termcapinfo xterm*|rxvt*|kterm*|Eterm*  hs:ts=\E]2;:fs=\007:ds=\E]2;screen\007
+
+# Enable automatic window renaming
+autonumber
+
+# Create tabs
+screen -t konsole
+screen -t rqt1
+screen -t rqt2
+screen -t rviz2
+screen -t controller
+screen -t display
+screen -t deck_capture
+screen -t deck_play
+
+# Increase the scrollback buffer to 5000 lines
+defscrollback 5000
+
+# switch windows with F3 (prev) and F4 (next)
+bindkey "^[OR" prev
+bindkey "^[OS" next
