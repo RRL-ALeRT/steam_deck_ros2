@@ -47,7 +47,7 @@ def open_ros_apps():
     switch_to_desktop(2)
 
     commands = {
-        "rqt2": f"rqt --force-discover --perspective-file {rqt2}",
+        "rqt2": f"rqt --force-discover --perspective-file {rqt2} --lock-perspective",
         "konsole": f"konsole -e 'ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a'",
     }
 
@@ -60,7 +60,7 @@ def open_ros_apps():
     switch_to_desktop(1)
 
     commands = {
-        "rqt1": f"rqt --force-discover --perspective-file {rqt1}",
+        "rqt1": f"rqt --force-discover --perspective-file {rqt1} --lock-perspective",
         "rviz2": "rviz2",
         "controller": "ros2 launch spot_driver_plus controller_launch.py",
         "display": "ros2 launch image_display image_display_launch.py",
