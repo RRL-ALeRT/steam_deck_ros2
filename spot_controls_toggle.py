@@ -102,7 +102,7 @@ def open_ros_apps():
             subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
             time.sleep(0.5)
             subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
-        time.sleep(1)
+        time.sleep(3)
 
     # Switch back to Desktop 1
     switch_to_desktop(1)
