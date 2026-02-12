@@ -64,8 +64,8 @@ def open_ros_apps():
     # We will launch them and then move them to Desktop 2 (index 1)
     commands_to_desktop_2 = {
         "dashboard": {
-            "title": "Spot Dashboard",
-            "cmd": f"rqt --force-discover --perspective-file {rqt2} --lock-perspective --title 'Spot Dashboard'"
+            "title": "dashboard_rqt", # Target substring for the perspective filename
+            "cmd": f"rqt --force-discover --perspective-file {rqt2} --lock-perspective"
         },
         "console": {
             "title": "Spot Console",
@@ -98,8 +98,8 @@ def open_ros_apps():
     # We will move them to Desktop 1 (index 0)
     commands_to_desktop_1 = {
         "estop": {
-            "title": "Spot Estop",
-            "cmd": f"rqt --force-discover --perspective-file {rqt1} --lock-perspective --title 'Spot Estop'"
+            "title": "estop_rqt", # Target substring for the perspective filename
+            "cmd": f"rqt --force-discover --perspective-file {rqt1} --lock-perspective"
         },
         "rviz2": {
             "title": "rviz2", # rviz2 typically sets its title to rviz2 or Rviz2
