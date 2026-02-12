@@ -38,8 +38,8 @@ def open_ros_apps():
 
     # First desktop: rqt2 and ssh console
     commands_desktop_2 = {
-        "ssh": f"konsole -e ssh {MAX_USER}@{MAX_IP} -t tmux attach-session",
-        "rqt2": f"rqt --force-discover --perspective-file {rqt2}",
+        "rqt2": f"rqt --force-discover --perspective-file {rqt2} --lock-perspective",
+        "konsole": f"konsole -e 'ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a'",
     }
 
     for i, (win_name, cmd) in enumerate(commands_desktop_2.items()):
@@ -59,11 +59,9 @@ def open_ros_apps():
 
     # Second desktop: rqt1, rviz2, controller, deck_capture
     commands_desktop_1 = {
-        "rqt1": f"rqt --force-discover --perspective-file {rqt1}",
-        "controller": "ros2 launch spot_driver_plus controller_launch.py",
-        #"deck_capture": "ros2 run audio_capture audio_capture_node --ros-args -p format:=wave -r __ns:=/operator",
+        "rqt1": f"rqt --force-discover --perspective-file {rqt1} --lock-perspective",
         "rviz2": "rviz2",
-        # "deck_play": "ros2 run audio_play audio_play_node --ros-args -p format:=wave -r __ns:=/nuc",
+        "controller": "ros2 launch spot_driver_plus controller_launch.py",
     }
 
     for win_name, cmd in commands_desktop_1.items():
