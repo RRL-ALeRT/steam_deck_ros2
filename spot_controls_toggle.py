@@ -9,6 +9,7 @@ import sys
 import subprocess
 import signal
 import time
+import uuid
 from PyQt5.QtWidgets import QApplication
 import gi
 gi.require_version('AppIndicator3', '0.1')
@@ -34,6 +35,30 @@ def move_window_to_desktop(title, desktop_index):
         subprocess.Popen(cmd, shell=True)
     except Exception as e:
         print(f"Failed to initiate move for window '{title}': {e}")
+
+def get_unique_perspective(original_path):
+    """Creates a unique symlink for a perspective file to avoid rqt's buggy cleanup logic."""
+    if not os.path.exists(original_path):
+        return original_path
+    
+    try:
+        unique_id = str(uuid.uuid4())[:8]
+        tmp_dir = "/tmp/rqt_perspectives"
+        os.makedirs(tmp_dir, exist_ok=True)
+        
+        file_name = os.path.basename(original_path)
+        base, ext = os.path.splitext(file_name)
+        # Unique name ensures rqt treats it as a 'new' import every time
+        unique_file_name = f"{base}_{unique_id}{ext}"
+        unique_path = os.path.join(tmp_dir, unique_file_name)
+        
+        if os.path.exists(unique_path):
+            os.remove(unique_path)
+        os.symlink(original_path, unique_path)
+        return unique_path
+    except Exception as e:
+        print(f"Failed to create unique perspective symlink: {e}")
+        return original_path
 
 # Use home directory instead of hardcoded paths
 home_dir = os.path.expanduser("~")
@@ -62,10 +87,13 @@ def open_ros_apps():
 
     # First desktop (intended): rqt2 and ssh console
     # We will launch them and then move them to Desktop 2 (index 1)
+    # Workaround: Use unique perspective path to avoid rqt crash
+    rqt2_unique = get_unique_perspective(rqt2)
+    
     commands_to_desktop_2 = {
         "dashboard": {
-            "title": "dashboard_rqt", # Target substring for the perspective filename
-            "cmd": f"rqt --force-discover --perspective-file {rqt2} --lock-perspective"
+            "title": os.path.basename(rqt2_unique).replace(".perspective", ""), 
+            "cmd": f"rqt --force-discover --perspective-file {rqt2_unique} --lock-perspective"
         },
         "console": {
             "title": "Spot Console",
@@ -96,10 +124,13 @@ def open_ros_apps():
 
     # Second desktop (intended): rqt1, rviz2, controller
     # We will move them to Desktop 1 (index 0)
+    # Workaround: Use unique perspective path to avoid rqt crash
+    rqt1_unique = get_unique_perspective(rqt1)
+    
     commands_to_desktop_1 = {
         "estop": {
-            "title": "estop_rqt", # Target substring for the perspective filename
-            "cmd": f"rqt --force-discover --perspective-file {rqt1} --lock-perspective"
+            "title": os.path.basename(rqt1_unique).replace(".perspective", ""),
+            "cmd": f"rqt --force-discover --perspective-file {rqt1_unique} --lock-perspective"
         },
         "rviz2": {
             "title": "rviz2", # rviz2 typically sets its title to rviz2 or Rviz2
