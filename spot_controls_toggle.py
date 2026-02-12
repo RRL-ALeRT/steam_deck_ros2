@@ -10,6 +10,7 @@ import subprocess
 import signal
 import time
 import uuid
+import shlex
 from PyQt5.QtWidgets import QApplication
 import gi
 gi.require_version('AppIndicator3', '0.1')
@@ -86,7 +87,7 @@ def open_ros_apps():
             "cmd": f"rqt --force-discover --perspective-file {rqt2_unique} --lock-perspective"
         },
         "console": {
-            "cmd": f"konsole -e 'ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a'"
+            "cmd": f'konsole -e "ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a"'
         },
     }
 
@@ -95,12 +96,12 @@ def open_ros_apps():
         if i == 0:
             # Rename first window and send command keys
             subprocess.call(f"tmux rename-window -t {session}:0 {win_key}", shell=True)
-            subprocess.call(f"tmux send-keys -t {session}:{win_key} '{cmd}' C-m", shell=True)
+            subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
         else:
             # Create new empty window, then send command keys to run command interactively
             subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
             time.sleep(0.5)
-            subprocess.call(f"tmux send-keys -t {session}:{win_key} '{cmd}' C-m", shell=True)
+            subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
         time.sleep(1)
 
     # Switch back to Desktop 1
@@ -128,7 +129,7 @@ def open_ros_apps():
         # Create new empty window, then send command keys
         subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
         time.sleep(0.5)
-        subprocess.call(f"tmux send-keys -t {session}:{win_key} '{cmd}' C-m", shell=True)
+        subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
         time.sleep(1)
 
 def close_ros_apps():
