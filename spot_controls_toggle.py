@@ -22,19 +22,7 @@ def is_steamos():
     except:
         return False
 
-def move_window_to_desktop(title, desktop_index):
-    """Moves a window with the given title to a specific desktop index (0-indexed) using wmctrl.
-    This is non-blocking to the main script.
-    """
-    # Desktops in wmctrl are 0-indexed.
-    # We use -r to target by title and -t to move to desktop index.
-    # Note: This does not switch the user's current desktop.
-    try:
-        # Give the window a moment to appear in the background
-        cmd = f"sleep 3 && wmctrl -r '{title}' -t {desktop_index}"
-        subprocess.Popen(cmd, shell=True)
-    except Exception as e:
-        print(f"Failed to initiate move for window '{title}': {e}")
+
 
 def get_unique_perspective(original_path):
     """Creates a unique symlink for a perspective file to avoid rqt's buggy cleanup logic."""
@@ -85,25 +73,25 @@ def open_ros_apps():
     # Create new tmux session in detached mode with first window named 'rqt2'
     subprocess.call(f"tmux new-session -d -s {session} -n rqt2", shell=True)
 
-    # First desktop (intended): rqt2 and ssh console
-    # We will launch them and then move them to Desktop 2 (index 1)
+    # Switch to Desktop 2
+    switch_to_desktop(2)
+    time.sleep(1.5)
+
+    # First desktop: rqt2 and ssh console
     # Workaround: Use unique perspective path to avoid rqt crash
     rqt2_unique = get_unique_perspective(rqt2)
     
     commands_to_desktop_2 = {
         "dashboard": {
-            "title": os.path.basename(rqt2_unique).replace(".perspective", ""), 
             "cmd": f"rqt --force-discover --perspective-file {rqt2_unique} --lock-perspective"
         },
         "console": {
-            "title": "Spot Console",
-            "cmd": f"konsole --title 'Spot Console' -e 'ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a'"
+            "cmd": f"konsole -e 'ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a'"
         },
     }
 
     for i, (win_key, data) in enumerate(commands_to_desktop_2.items()):
         cmd = data["cmd"]
-        title = data["title"]
         if i == 0:
             # Rename first window and send command keys
             subprocess.call(f"tmux rename-window -t {session}:0 {win_key}", shell=True)
@@ -113,46 +101,34 @@ def open_ros_apps():
             subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
             time.sleep(0.5)
             subprocess.call(f"tmux send-keys -t {session}:{win_key} '{cmd}' C-m", shell=True)
-        
-        # Move to Desktop 2 (index 1) in background
-        move_window_to_desktop(title, 1)
         time.sleep(1)
 
-    # Removed intrusive desktop switching as requested
-    # switch_to_desktop(1)
-    # time.sleep(1)
+    # Switch back to Desktop 1
+    switch_to_desktop(1)
+    time.sleep(1.5)
 
-    # Second desktop (intended): rqt1, rviz2, controller
-    # We will move them to Desktop 1 (index 0)
+    # Second desktop: rqt1, rviz2, controller
     # Workaround: Use unique perspective path to avoid rqt crash
     rqt1_unique = get_unique_perspective(rqt1)
     
     commands_to_desktop_1 = {
         "estop": {
-            "title": os.path.basename(rqt1_unique).replace(".perspective", ""),
             "cmd": f"rqt --force-discover --perspective-file {rqt1_unique} --lock-perspective"
         },
         "rviz2": {
-            "title": "rviz2", # rviz2 typically sets its title to rviz2 or Rviz2
             "cmd": "rviz2"
         },
         "controller": {
-            "title": "", # No window for controller
             "cmd": "ros2 launch spot_driver_plus controller_launch.py"
         },
     }
 
     for win_key, data in commands_to_desktop_1.items():
         cmd = data["cmd"]
-        title = data["title"]
         # Create new empty window, then send command keys
         subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
         time.sleep(0.5)
         subprocess.call(f"tmux send-keys -t {session}:{win_key} '{cmd}' C-m", shell=True)
-        
-        if title:
-            # Move to Desktop 1 (index 0) in background
-            move_window_to_desktop(title, 0)
         time.sleep(1)
 
 def close_ros_apps():
