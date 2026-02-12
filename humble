@@ -1,29 +1,43 @@
 # Robostack ROS2
-micromamba activate ros_env
+eval "$(/home/deck/miniforge3/bin/mamba shell hook --shell bash)"
+mamba activate ros_env
 
-export ROS_DOMAIN_ID=112
+# export ROS_DOMAIN_ID=112
 
 . ~/bosdyn_msgs/install/setup.bash
 . ~/ros2_ws/install/setup.bash
 
 function cb {
-    local select_packages=""
+    local colcon_args=(
+        --symlink-install
+        --cmake-args
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        -DBUILD_TESTING=OFF
+    )
 
-    # Check if additional arguments are provided
     if [ $# -gt 0 ]; then
-        select_packages="--packages-select $*"
+        colcon_args+=(--packages-select "$@")
     fi
 
-    # Execute colcon build command with the provided arguments
-    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo $select_packages
+    colcon build "${colcon_args[@]}"
 }
 
+# Spot config
 export MAX_USER=max1
 export MAX_IP=192.168.50.10
 export GEN3_IP=192.168.50.9
+
+# Go2 config
+#export MAX_USER=max1
+#export MAX_IP=192.168.123.99
 
 export EDITOR="nano"
 
 export CMAKE_INCLUDE_PATH=/home/deck/micromamba/envs/ros_env/include:/home/deck/micromamba/pkgs/mesalib-24.0.2-h90bb098_1/include
 
 export LIBVA_DRIVERS_PATH=/usr/lib/dri
+
+export ROS_DISCOVERY_SERVER="192.168.50.10:11811;192.168.50.111:11888"
+
+export CPLUS_INCLUDE_PATH=/usr/include:$CPLUS_INCLUDE_PATH
