@@ -114,6 +114,8 @@ Copy key to the on-board PC
 ssh-copy-id user@host
 ```
 
+15. Update kwinrulesrc~/.config/kwinrulesrc so that windows open in corresponding desktops.
+
 
 Thanks to https://github.com/ctu-vras/steam-deck-ros-controller
 

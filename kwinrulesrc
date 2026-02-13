@@ -1,0 +1,37 @@
+[$Version]
+update_info=kwinrules.upd:replace-placement-string-to-enum,kwinrules.upd:use-virtual-desktop-ids
+
+[General]
+count=5
+rules=1,2,3,4,5
+
+[1]
+# (Keep whatever your existing rule 1 is here)
+
+[2]
+description=rqt estop → desktop 1
+titlematch=2
+title=estop
+desktop=1
+desktopforce=2
+
+[3]
+description=rviz2 → desktop 1
+wmclass=rviz2
+wmclassmatch=1
+desktop=1
+desktopforce=2
+
+[4]
+description=rqt dashboard → desktop 2
+wmclass=rqt_gui
+wmclassmatch=1
+desktop=2
+desktopforce=2
+
+[5]
+description=konsole ssh → desktop 2
+titlematch=2
+title=spot_ssh
+desktop=2
+desktopforce=2
