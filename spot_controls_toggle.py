@@ -56,26 +56,19 @@ KONSOLE_TITLE = "spot_ssh"
 
 def snap_windows_to_desktops():
     """
-    Wait for windows to appear and then move them using wmctrl.
-    wmctrl desktop index: 0 = Desktop 1, 1 = Desktop 2
+    Background thread to move specific windows back to Desktop 1.
+    wmctrl index: 0 = Desktop 1
     """
-    # Define mapping: (Partial Window Title/Class, Target Desktop Index)
     targets = [
-        ("RViz", 0),          # rviz2 -> Desktop 1
-        ("estop", 0),         # rqt estop -> Desktop 1
-        ("DashboardRqt", 1),  # Match the specific Dashboard title -> Desktop 2
-        (KONSOLE_TITLE, 1)    # SSH Console -> Desktop 2
+        ("RViz", 0),          # Push RViz back to Desktop 1
+        ("estop", 0),         # Push E-Stop back to Desktop 1
     ]
 
-    # Try for up to 15 seconds (Plugins can be slow) to find and move all windows
     start_time = time.time()
     while time.time() - start_time < 15:
         found_all = True
         for title_part, desktop_idx in targets:
             try:
-                # -r: target by title, -t: move to desktop index
-                # We use subprocess.run without checking returncode initially 
-                # because wmctrl might fail if the window isn't ready yet.
                 result = subprocess.run(
                     ["wmctrl", "-r", title_part, "-t", str(desktop_idx)],
                     capture_output=True
@@ -87,7 +80,7 @@ def snap_windows_to_desktops():
         
         if found_all:
             break
-        time.sleep(1.0) # Poll every second
+        time.sleep(1.0)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -112,10 +105,24 @@ def get_session():
     return sessions[0] if sessions else None
 
 # ---------------------------------------------------------------------------
-# Launch / close using libtmux
+# Launch Logic
 # ---------------------------------------------------------------------------
 
 def open_ros_apps():
+    # Shift to Desktop 2 (Index 1) initially so dashboard/ssh spawn there
+    try:
+        # Using index-based shift via KWin DBus script
+        # This is cleaner than using the long UUID strings
+        shift_script = 'workspace.currentDesktop = workspace.desktops[1];'
+        subprocess.run([
+            "qdbus", "org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting.loadScript", 
+            "/dev/stdin", "temp_shift"
+        ], input=shift_script.encode(), stdout=subprocess.DEVNULL)
+        subprocess.run(["qdbus", "org.kde.KWin", "/Scripting/temp_shift", "org.kde.kwin.Scripting.run"])
+        subprocess.run(["qdbus", "org.kde.KWin", "/Scripting/temp_shift", "org.kde.kwin.Scripting.unloadScript"])
+    except Exception as e:
+        log(f"Initial desktop shift failed: {e}")
+
     server  = libtmux.Server()
     session = get_session() 
     
@@ -142,7 +149,7 @@ def open_ros_apps():
             window = session.new_window(window_name=win_key)
         window.panes[0].send_keys(cmd, enter=True)
 
-    # Launch the window snapper in a separate thread
+    # Start the thread to push RViz and E-Stop back to Desktop 1
     threading.Thread(target=snap_windows_to_desktops, daemon=True).start()
 
 def close_ros_apps():
@@ -151,7 +158,7 @@ def close_ros_apps():
         session.kill()
 
 # ---------------------------------------------------------------------------
-# Tray indicator
+# UI Setup
 # ---------------------------------------------------------------------------
 
 def toggle_ros_apps(_):
