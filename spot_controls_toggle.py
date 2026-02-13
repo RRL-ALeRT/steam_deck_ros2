@@ -61,19 +61,21 @@ def snap_windows_to_desktops():
     """
     # Define mapping: (Partial Window Title/Class, Target Desktop Index)
     targets = [
-        ("RViz", 0),       # rviz2 -> Desktop 1
-        ("estop", 0),      # rqt estop -> Desktop 1
-        ("rqt_gui", 1),    # dashboard -> Desktop 2
-        (KONSOLE_TITLE, 1) # SSH Console -> Desktop 2
+        ("RViz", 0),          # rviz2 -> Desktop 1
+        ("estop", 0),         # rqt estop -> Desktop 1
+        ("DashboardRqt", 1),  # Match the specific Dashboard title -> Desktop 2
+        (KONSOLE_TITLE, 1)    # SSH Console -> Desktop 2
     ]
 
-    # Try for up to 10 seconds to find and move all windows
+    # Try for up to 15 seconds (Plugins can be slow) to find and move all windows
     start_time = time.time()
-    while time.time() - start_time < 10:
+    while time.time() - start_time < 15:
         found_all = True
         for title_part, desktop_idx in targets:
             try:
                 # -r: target by title, -t: move to desktop index
+                # We use subprocess.run without checking returncode initially 
+                # because wmctrl might fail if the window isn't ready yet.
                 result = subprocess.run(
                     ["wmctrl", "-r", title_part, "-t", str(desktop_idx)],
                     capture_output=True
@@ -140,7 +142,7 @@ def open_ros_apps():
             window = session.new_window(window_name=win_key)
         window.panes[0].send_keys(cmd, enter=True)
 
-    # Launch the window snappper in a separate thread so the UI stays responsive
+    # Launch the window snapper in a separate thread
     threading.Thread(target=snap_windows_to_desktops, daemon=True).start()
 
 def close_ros_apps():
