@@ -92,7 +92,7 @@ def open_ros_apps():
     session = get_session() 
     
     if session:
-        session.kill_session()
+        session.kill()
         time.sleep(0.3)  # wait for tmux to release the session name
 
     session      = server.new_session(session_name=TMUX_SESSION, window_name="init", detach=True)
@@ -117,7 +117,7 @@ def open_ros_apps():
 def close_ros_apps():
     session = get_session()
     if session:
-        session.kill_session()
+        session.kill()
 
 # ---------------------------------------------------------------------------
 # Tray indicator
