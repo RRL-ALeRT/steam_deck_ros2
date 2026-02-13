@@ -9,6 +9,7 @@ import signal
 import time
 import uuid
 import libtmux
+import traceback
 import gi
 
 gi.require_version('AppIndicator3', '0.1')
@@ -125,7 +126,7 @@ def toggle_ros_apps(_):
         else:
             open_ros_apps()
     except Exception as e:
-        log(f"ERROR in toggle: {e}")
+        log(f"ERROR in toggle:\n{traceback.format_exc()}")
 
 spot_icon = os.path.join(home_dir, "steam_deck_ros2/spot.png")
 
