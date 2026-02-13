@@ -114,7 +114,6 @@ Copy key to the on-board PC
 ssh-copy-id user@host
 ```
 
-
 Thanks to https://github.com/ctu-vras/steam-deck-ros-controller
 
 

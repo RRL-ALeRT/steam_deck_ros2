@@ -1,0 +1,17 @@
+[Desktop Entry]
+Comment[en_US]=Run spot_controls_toggle.py
+Comment=Run spot_controls_toggle.py
+Exec=python3 /home/deck/steam_deck_ros2/spot_controls_toggle.py
+GenericName[en_US]=
+GenericName=
+Icon=python
+MimeType=
+Name[en_US]=Spot Controls Toggle
+Name=Spot Controls Toggle
+Path=/home/deck/steam_deck_ros2/
+StartupNotify=true
+Terminal=true
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=

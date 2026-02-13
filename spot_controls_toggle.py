@@ -1,167 +1,184 @@
-#!/usr/bin/env python3
-
-# For steam deck, this has to be executed through crontab @reboot
-# All the dependencies should be installed in arch
-# sudo pacman -Sy pango python-gobject gtk3 libappindicator-gtk3
+#!/usr/bin/python3
 
 import os
-import sys
 import subprocess
 import signal
 import time
 import uuid
-import shlex
-from PyQt5.QtWidgets import QApplication
+import libtmux
+import traceback
 import gi
+import threading
+
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import AppIndicator3 as appindicator, Gtk
 
-def is_steamos():
-    try:
-        with open("/etc/os-release", "r") as f:
-            return "ID=steamos" in f.read()
-    except:
-        return False
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
 
+home_dir   = os.path.expanduser("~")
+script_dir = os.path.dirname(os.path.abspath(__file__))
 
+def load_env_file(path):
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("export "):
+                key, _, value = line[len("export "):].partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+
+log_path = os.path.join(script_dir, "crash_log.txt")
+
+def log(msg):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_path, "a") as f:
+        f.write(f"[{timestamp}] {msg}\n")
+
+try:
+    load_env_file(os.path.join(script_dir, "humble"))
+    MAX_USER = os.environ["MAX_USER"]
+    MAX_IP   = os.environ["MAX_IP"]
+except Exception as e:
+    log(f"FATAL: {e}")
+    raise
+
+workspace_path    = "ros2_ws/src/alert_dashboard_rqt"
+pkg_path          = os.path.join(home_dir, workspace_path)
+estop_perspective = f"{pkg_path}/resource/estop_rqt.perspective"
+
+TMUX_SESSION = "steamdeck"
+KONSOLE_TITLE = "spot_ssh"
+
+# ---------------------------------------------------------------------------
+# Window Management Logic
+# ---------------------------------------------------------------------------
+
+def snap_windows_to_desktops():
+    """
+    Background thread to move specific windows back to Desktop 1.
+    wmctrl index: 0 = Desktop 1
+    """
+    targets = [
+        ("RViz", 0),          # Push RViz back to Desktop 1
+        ("estop", 0),         # Push E-Stop back to Desktop 1
+    ]
+
+    start_time = time.time()
+    # Poll for 15 seconds to catch windows as they spawn
+    while time.time() - start_time < 15:
+        found_all = True
+        for title_part, desktop_idx in targets:
+            try:
+                # -r: target by title substring, -t: move to desktop index
+                result = subprocess.run(
+                    ["wmctrl", "-r", title_part, "-t", str(desktop_idx)],
+                    capture_output=True
+                )
+                if result.returncode != 0:
+                    found_all = False
+            except Exception:
+                found_all = False
+        
+        if found_all:
+            break
+        time.sleep(1.0)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def get_unique_perspective(original_path):
-    """Creates a unique symlink for a perspective file to avoid rqt's buggy cleanup logic."""
     if not os.path.exists(original_path):
-        return original_path
-    
-    try:
-        unique_id = str(uuid.uuid4())[:8]
-        tmp_dir = "/tmp/rqt_perspectives"
-        os.makedirs(tmp_dir, exist_ok=True)
-        
-        file_name = os.path.basename(original_path)
-        base, ext = os.path.splitext(file_name)
-        # Unique name ensures rqt treats it as a 'new' import every time
-        unique_file_name = f"{base}_{unique_id}{ext}"
-        unique_path = os.path.join(tmp_dir, unique_file_name)
-        
-        if os.path.exists(unique_path):
-            os.remove(unique_path)
-        os.symlink(original_path, unique_path)
-        return unique_path
-    except Exception as e:
-        print(f"Failed to create unique perspective symlink: {e}")
-        return original_path
+        raise FileNotFoundError(f"Perspective file not found: {original_path}")
+    unique_id   = str(uuid.uuid4())[:8]
+    tmp_dir     = "/tmp/rqt_perspectives"
+    os.makedirs(tmp_dir, exist_ok=True)
+    base, ext   = os.path.splitext(os.path.basename(original_path))
+    unique_path = os.path.join(tmp_dir, f"{base}_{unique_id}{ext}")
+    if os.path.exists(unique_path):
+        os.remove(unique_path)
+    os.symlink(original_path, unique_path)
+    return unique_path
 
-# Use home directory instead of hardcoded paths
-home_dir = os.path.expanduser("~")
-workspace_path = "ros2_ws/src/alert_dashboard_rqt"
-pkg_path = os.path.join(home_dir, workspace_path)
+def get_session():
+    server = libtmux.Server()
+    sessions = server.sessions.filter(session_name=TMUX_SESSION)
+    return sessions[0] if sessions else None
 
-rqt1 = f"{pkg_path}/resource/estop_rqt.perspective"
-rqt2 = f"{pkg_path}/resource/dashboard_rqt.perspective"
-
-MAX_USER = "max1"
-MAX_IP = "192.168.50.10"
-
-def switch_to_desktop(number):
-    command = f"qdbus org.kde.KWin /KWin org.kde.KWin.setCurrentDesktop {number}"
-    subprocess.Popen(command, shell=True)
+# ---------------------------------------------------------------------------
+# Launch Logic
+# ---------------------------------------------------------------------------
 
 def open_ros_apps():
-    session = "steamdeck"
+    # Force shift to Desktop 2 immediately
+    try:
+        subprocess.run(["qdbus", "org.kde.KWin", "/KWin", "org.kde.KWin.setCurrentDesktop", "2"])
+    except Exception as e:
+        log(f"Initial desktop shift failed: {e}")
 
-    # Kill any existing tmux session
-    subprocess.call(f"tmux kill-session -t {session}", shell=True)
-    time.sleep(1)
-
-    # Create new tmux session in detached mode with first window named 'rqt2'
-    subprocess.call(f"tmux new-session -d -s {session} -n rqt2", shell=True)
-
-    # Switch to Desktop 2
-    switch_to_desktop(2)
-    time.sleep(1.5)
-
-    # First desktop: rqt2 and ssh console
-    # Workaround: Use unique perspective path to avoid rqt crash
-    rqt2_unique = get_unique_perspective(rqt2)
+    server  = libtmux.Server()
+    session = get_session() 
     
-    commands_to_desktop_2 = {
-        "dashboard": {
-            "cmd": f"rqt --force-discover --perspective-file {rqt2_unique} --lock-perspective"
-        },
-        "console": {
-            "cmd": f'konsole -e "ssh {MAX_USER}@{MAX_IP} -t sleep 5 ; tmux a"'
-        },
+    if session:
+        session.kill()
+        time.sleep(0.3)
+
+    session      = server.new_session(session_name=TMUX_SESSION, window_name="init", detach=True)
+    estop_unique = get_unique_perspective(estop_perspective)
+
+    commands = {
+        "dashboard":  "ros2 run rqt_gui rqt_gui --standalone alert_dashboard_rqt.alert_dashboard_rqt.DashboardRqtPlugin",
+        "console":    f"konsole --title {KONSOLE_TITLE} -e bash -c 'while true; do ssh {MAX_USER}@{MAX_IP} -t \"sleep 5; tmux new -A -s spot_remote\"; sleep 5; done'",
+        "estop":      f"rqt --force-discover --perspective-file {estop_unique} --lock-perspective",
+        "rviz2":      "rviz2",
+        "controller": "ros2 launch spot_driver_plus controller_launch.py",
     }
 
-    for i, (win_key, data) in enumerate(commands_to_desktop_2.items()):
-        cmd = data["cmd"]
+    for i, (win_key, cmd) in enumerate(commands.items()):
         if i == 0:
-            # Rename first window and send command keys
-            subprocess.call(f"tmux rename-window -t {session}:0 {win_key}", shell=True)
-            subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
+            window = session.windows[0]
+            window.rename_window(win_key)
         else:
-            # Create new empty window, then send command keys to run command interactively
-            subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
-            time.sleep(0.5)
-            subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
-        time.sleep(3)
+            window = session.new_window(window_name=win_key)
+        window.panes[0].send_keys(cmd, enter=True)
 
-    # Switch back to Desktop 1
-    switch_to_desktop(1)
-    time.sleep(1.5)
-
-    # Second desktop: rqt1, rviz2, controller
-    # Workaround: Use unique perspective path to avoid rqt crash
-    rqt1_unique = get_unique_perspective(rqt1)
-    
-    commands_to_desktop_1 = {
-        "estop": {
-            "cmd": f"rqt --force-discover --perspective-file {rqt1_unique} --lock-perspective"
-        },
-        "rviz2": {
-            "cmd": "rviz2"
-        },
-        "controller": {
-            "cmd": "ros2 launch spot_driver_plus controller_launch.py"
-        },
-    }
-
-    for win_key, data in commands_to_desktop_1.items():
-        cmd = data["cmd"]
-        # Create new empty window, then send command keys
-        subprocess.call(f"tmux new-window -t {session} -n {win_key}", shell=True)
-        time.sleep(0.5)
-        subprocess.call(f"tmux send-keys -t {session}:{win_key} {shlex.quote(cmd)} C-m", shell=True)
-        time.sleep(1)
+    # Start the thread to push RViz and E-Stop back to Desktop 1
+    threading.Thread(target=snap_windows_to_desktops, daemon=True).start()
 
 def close_ros_apps():
-    subprocess.call("tmux kill-session -t steamdeck", shell=True)
+    session = get_session()
+    if session:
+        session.kill()
+
+# ---------------------------------------------------------------------------
+# UI Setup
+# ---------------------------------------------------------------------------
 
 def toggle_ros_apps(_):
-    global apps_running
-    if apps_running:
-        close_ros_apps()
-        apps_running = False
-    else:
-        open_ros_apps()
-        apps_running = True
-
-apps_running = False
-
-app = QApplication(sys.argv)
-app.setQuitOnLastWindowClosed(False)
+    try:
+        if get_session():
+            close_ros_apps()
+        else:
+            open_ros_apps()
+    except Exception as e:
+        log(f"ERROR in toggle:\n{traceback.format_exc()}")
 
 spot_icon = os.path.join(home_dir, "steam_deck_ros2/spot.png")
 
-indicator = appindicator.Indicator.new("Spot Control View", spot_icon, appindicator.IndicatorCategory.SYSTEM_SERVICES)
+indicator = appindicator.Indicator.new(
+    "Spot Control View",
+    spot_icon,
+    appindicator.IndicatorCategory.SYSTEM_SERVICES
+)
 indicator.set_status(appindicator.IndicatorStatus.ACTIVE)
 
 menu = Gtk.Menu()
-
 toggle_item = Gtk.ImageMenuItem.new_with_label("Toggle Control View")
 toggle_item.set_image(Gtk.Image.new_from_file(spot_icon))
 toggle_item.set_always_show_image(True)
 toggle_item.connect('activate', toggle_ros_apps)
 menu.append(toggle_item)
-
 menu.show_all()
 indicator.set_menu(menu)
 
