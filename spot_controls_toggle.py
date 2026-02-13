@@ -65,10 +65,12 @@ def snap_windows_to_desktops():
     ]
 
     start_time = time.time()
+    # Poll for 15 seconds to catch windows as they spawn
     while time.time() - start_time < 15:
         found_all = True
         for title_part, desktop_idx in targets:
             try:
+                # -r: target by title substring, -t: move to desktop index
                 result = subprocess.run(
                     ["wmctrl", "-r", title_part, "-t", str(desktop_idx)],
                     capture_output=True
@@ -109,17 +111,9 @@ def get_session():
 # ---------------------------------------------------------------------------
 
 def open_ros_apps():
-    # Shift to Desktop 2 (Index 1) initially so dashboard/ssh spawn there
+    # Force shift to Desktop 2 immediately
     try:
-        # Using index-based shift via KWin DBus script
-        # This is cleaner than using the long UUID strings
-        shift_script = 'workspace.currentDesktop = workspace.desktops[1];'
-        subprocess.run([
-            "qdbus", "org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting.loadScript", 
-            "/dev/stdin", "temp_shift"
-        ], input=shift_script.encode(), stdout=subprocess.DEVNULL)
-        subprocess.run(["qdbus", "org.kde.KWin", "/Scripting/temp_shift", "org.kde.kwin.Scripting.run"])
-        subprocess.run(["qdbus", "org.kde.KWin", "/Scripting/temp_shift", "org.kde.kwin.Scripting.unloadScript"])
+        subprocess.run(["qdbus", "org.kde.KWin", "/KWin", "org.kde.KWin.setCurrentDesktop", "2"])
     except Exception as e:
         log(f"Initial desktop shift failed: {e}")
 
