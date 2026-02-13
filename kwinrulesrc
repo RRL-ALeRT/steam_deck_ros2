@@ -12,26 +12,26 @@ rules=1,2,3,4,5
 description=rqt estop → desktop 1
 titlematch=2
 title=estop
-desktop=1
-desktopforce=2
+desktops=0a9f74b2-60e8-4743-a12d-bccbfbf32f2c
+desktopsrule=2
 
 [3]
 description=rviz2 → desktop 1
 wmclass=rviz2
 wmclassmatch=1
-desktop=1
-desktopforce=2
+desktops=0a9f74b2-60e8-4743-a12d-bccbfbf32f2c
+desktopsrule=2
 
 [4]
 description=rqt dashboard → desktop 2
 wmclass=rqt_gui
 wmclassmatch=1
-desktop=2
-desktopforce=2
+desktops=2a70f6ab-3503-49b4-bdae-642791cc39d4
+desktopsrule=2
 
 [5]
 description=konsole ssh → desktop 2
 titlematch=2
 title=spot_ssh
-desktop=2
-desktopforce=2
+desktops=2a70f6ab-3503-49b4-bdae-642791cc39d4
+desktopsrule=2

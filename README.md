@@ -115,7 +115,11 @@ ssh-copy-id user@host
 ```
 
 15. Update kwinrulesrc~/.config/kwinrulesrc so that windows open in corresponding desktops.
+Find desktop ids (they change if number of desktops is changed) using
 
+```
+grep "Id_" ~/.config/kwinrc
+```
 
 Thanks to https://github.com/ctu-vras/steam-deck-ros-controller
 
