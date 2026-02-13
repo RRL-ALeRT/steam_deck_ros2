@@ -2,17 +2,18 @@
 
 # For steam deck, this has to be executed through crontab @reboot
 # All the dependencies should be installed in arch
-# sudo pacman -Sy pango python-gobject gtk3 libappindicator-gtk3
+# sudo pacman -Sy pango python-gobject gtk3 libappindicator-gtk3 python-libtmux
 
 import os
-import sys
 import subprocess
 import signal
 import time
 import uuid
-import stat
 import configparser
+import tempfile
+import libtmux
 import gi
+
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import AppIndicator3 as appindicator, Gtk
 
@@ -53,17 +54,13 @@ estop_perspective = f"{pkg_path}/resource/estop_rqt.perspective"
 
 TMUX_SESSION = "steamdeck"
 
-# Verify with: xdotool search --name "" after launching rqt manually with the
-# estop perspective. dashboard title comes from --standalone so is predictable.
 RQT_ESTOP_TITLE = "estop"
 KONSOLE_TITLE   = "spot_ssh"
 
 KWIN_RULES_PATH = os.path.join(home_dir, ".config", "kwinrulesrc")
 
 # ---------------------------------------------------------------------------
-# KWin rules — merged into kwinrulesrc by description, never destructive.
-# Rules are matched by their description key so re-runs are idempotent and
-# pre-existing rules at any group number are left untouched.
+# KWin rules
 # ---------------------------------------------------------------------------
 
 KWIN_RULES = {
@@ -79,7 +76,7 @@ KWIN_RULES = {
         "desktop":      "1",
         "desktopforce": "2",
     },
-    # dashboard uses --standalone so its title is the plugin class name — predictable.
+    # dashboard uses --standalone so wmclass is stable, no title guessing needed
     "rqt dashboard → desktop 2": {
         "wmclass":      "rqt_gui",
         "wmclassmatch": "1",
@@ -95,10 +92,12 @@ KWIN_RULES = {
 }
 
 def setup_kwin_rules():
-    """Merge our rules into kwinrulesrc without touching existing rules."""
+    """Merge our rules into kwinrulesrc atomically without touching existing rules."""
     config = configparser.RawConfigParser()
     config.optionxform = str  # preserve key case
-    config.read(KWIN_RULES_PATH)
+
+    if os.path.exists(KWIN_RULES_PATH):
+        config.read(KWIN_RULES_PATH)
 
     if not config.has_section("General"):
         config.add_section("General")
@@ -119,7 +118,7 @@ def setup_kwin_rules():
 
     for description, rule in KWIN_RULES.items():
         if description in desc_to_group:
-            group = desc_to_group[description]  # update existing group in place
+            group = desc_to_group[description]
         else:
             while str(next_num) in used_groups:
                 next_num += 1
@@ -137,8 +136,23 @@ def setup_kwin_rules():
 
     config.set("General", "count", str(new_count))
 
-    with open(KWIN_RULES_PATH, "w") as f:
-        config.write(f, space_around_delimiters=False)
+    # Atomic write: temp file in same dir then os.replace() to avoid corruption
+    config_dir = os.path.dirname(KWIN_RULES_PATH)
+    os.makedirs(config_dir, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(dir=config_dir, text=True)
+    try:
+        with os.fdopen(fd, "w") as f:
+            # Write manually to avoid configparser's blank lines between sections
+            # which KWin does not tolerate
+            for section in config.sections():
+                f.write(f"[{section}]\n")
+                for key, value in config.items(section):
+                    f.write(f"{key}={value}\n")
+        os.replace(temp_path, KWIN_RULES_PATH)
+    except Exception as e:
+        os.remove(temp_path)
+        log(f"Failed to write KWin rules: {e}")
+        raise
 
     subprocess.call("qdbus org.kde.KWin /KWin reconfigure", shell=True)
 
@@ -148,74 +162,48 @@ def setup_kwin_rules():
 
 def get_unique_perspective(original_path):
     """
-    Creates a unique symlink for a perspective file to avoid rqt's buggy
-    cleanup logic which crashes on re-import of the same path.
+    Creates a unique symlink to avoid rqt's buggy re-import crash.
     Only needed for estop — dashboard uses --standalone which has no such issue.
     """
     if not os.path.exists(original_path):
-        return original_path
-    try:
-        unique_id = str(uuid.uuid4())[:8]
-        tmp_dir   = "/tmp/rqt_perspectives"
-        os.makedirs(tmp_dir, exist_ok=True)
-        base, ext  = os.path.splitext(os.path.basename(original_path))
-        unique_path = os.path.join(tmp_dir, f"{base}_{unique_id}{ext}")
-        if os.path.exists(unique_path):
-            os.remove(unique_path)
-        os.symlink(original_path, unique_path)
-        return unique_path
-    except Exception as e:
-        print(f"Failed to create unique perspective symlink: {e}")
-        return original_path
+        raise FileNotFoundError(f"Perspective file not found: {original_path}")
+    unique_id   = str(uuid.uuid4())[:8]
+    tmp_dir     = "/tmp/rqt_perspectives"
+    os.makedirs(tmp_dir, exist_ok=True)
+    base, ext   = os.path.splitext(os.path.basename(original_path))
+    unique_path = os.path.join(tmp_dir, f"{base}_{unique_id}{ext}")
+    if os.path.exists(unique_path):
+        os.remove(unique_path)
+    os.symlink(original_path, unique_path)
+    return unique_path
 
-def make_temp_script(name, content):
-    """
-    Write a bash script to /tmp to avoid nested quoting issues when passing
-    commands through tmux send-keys. The script path is a simple string with
-    no special characters, so shlex quoting is always safe.
-    """
-    path = f"/tmp/spot_launcher_{name}.sh"
-    with open(path, "w") as f:
-        f.write(f"#!/bin/bash\n{content}\n")
-    os.chmod(path, os.stat(path).st_mode | stat.S_IEXEC)
-    return path
-
-def tmux(cmd):
-    subprocess.call(cmd, shell=True)
-
-def is_session_running():
-    result = subprocess.run(
-        f"tmux has-session -t {TMUX_SESSION}",
-        shell=True, capture_output=True
-    )
-    return result.returncode == 0
+def get_session():
+    """Return the tmux session if it exists, else None."""
+    server = libtmux.Server()
+    return server.find_where({"session_name": TMUX_SESSION})
 
 # ---------------------------------------------------------------------------
-# Launch / close
+# Launch / close using libtmux
 # ---------------------------------------------------------------------------
 
 def open_ros_apps():
     setup_kwin_rules()
 
-    tmux(f"tmux kill-session -t {TMUX_SESSION}")
-    time.sleep(0.3)  # wait for tmux to release the session name, not a GUI wait
-    tmux(f"tmux new-session -d -s {TMUX_SESSION} -n init")
+    server  = libtmux.Server()
+    session = server.find_where({"session_name": TMUX_SESSION})
+    if session:
+        session.kill_session()
+        time.sleep(0.3)  # wait for tmux to release the session name, not a GUI wait
 
+    session      = server.new_session(session_name=TMUX_SESSION, window_name="init", detach=True)
     estop_unique = get_unique_perspective(estop_perspective)
 
-    # Commands that contain nested quotes are written to temp scripts to avoid
-    # quoting ambiguity when passed through tmux send-keys.
-    console_script = make_temp_script(
-        "console",
-        f"konsole --title {KONSOLE_TITLE} -e bash -c "
-        f"'while true; do ssh {MAX_USER}@{MAX_IP} -t \"sleep 5; tmux a\"; sleep 5; done'"
-    )
-
     commands = {
-        # dashboard uses --standalone: single plugin, predictable title, no perspective file needed
+        # dashboard: --standalone loads single plugin with stable wmclass, no perspective file needed
         "dashboard":  "ros2 run rqt_gui rqt_gui --standalone alert_dashboard_rqt.alert_dashboard_rqt.DashboardRqtPlugin",
-        "console":    console_script,
-        # estop loads multiple plugins, so a perspective file is required
+        # while true reconnects automatically on SSH drop without needing a full restart
+        "console":    f"konsole --title {KONSOLE_TITLE} -e bash -c 'while true; do ssh {MAX_USER}@{MAX_IP} -t \"sleep 5; tmux a\"; sleep 5; done'",
+        # estop: loads multiple plugins so a perspective file is required
         "estop":      f"rqt --force-discover --perspective-file {estop_unique} --lock-perspective",
         "rviz2":      "rviz2",
         "controller": "ros2 launch spot_driver_plus controller_launch.py",
@@ -223,23 +211,25 @@ def open_ros_apps():
 
     for i, (win_key, cmd) in enumerate(commands.items()):
         if i == 0:
-            tmux(f"tmux rename-window -t {TMUX_SESSION}:0 {win_key}")
+            window = session.windows[0]
+            window.rename_window(win_key)
         else:
-            tmux(f"tmux new-window -t {TMUX_SESSION} -n {win_key}")
-        # cmd is either a simple path (script) or a command with no shell-special chars
-        # that need further quoting — all dangerous cases are handled by make_temp_script
-        tmux(f"tmux send-keys -t {TMUX_SESSION}:{win_key} {cmd!r} C-m")
+            window = session.new_window(window_name=win_key)
+        # send_keys sends characters directly to the PTY — no shell quoting involved
+        window.panes[0].send_keys(cmd, enter=True)
 
 def close_ros_apps():
-    tmux(f"tmux kill-session -t {TMUX_SESSION}")
+    session = get_session()
+    if session:
+        session.kill_session()
 
 # ---------------------------------------------------------------------------
-# Tray indicator — GTK only, no Qt needed
+# Tray indicator
 # ---------------------------------------------------------------------------
 
 def toggle_ros_apps(_):
     try:
-        if is_session_running():
+        if get_session():
             close_ros_apps()
         else:
             open_ros_apps()
