@@ -78,7 +78,9 @@ def get_unique_perspective(original_path):
 def get_session():
     """Return the tmux session if it exists, else None."""
     server = libtmux.Server()
-    return server.sessions.get(session_name=TMUX_SESSION)
+    # filter() returns a list, so we safely grab the first item if it exists
+    sessions = server.sessions.filter(session_name=TMUX_SESSION)
+    return sessions[0] if sessions else None
 
 # ---------------------------------------------------------------------------
 # Launch / close using libtmux
@@ -86,7 +88,9 @@ def get_session():
 
 def open_ros_apps():
     server  = libtmux.Server()
-    session = server.sessions.get(session_name=TMUX_SESSION)
+    # Re-use our safe helper function instead of calling .get() directly
+    session = get_session() 
+    
     if session:
         session.kill_session()
         time.sleep(0.3)  # wait for tmux to release the session name
