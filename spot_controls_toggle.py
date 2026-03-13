@@ -128,11 +128,13 @@ def open_ros_apps():
     estop_unique = get_unique_perspective(estop_perspective)
 
     commands = {
-        "dashboard":  "ros2 run rqt_gui rqt_gui --standalone alert_dashboard_rqt.alert_dashboard_rqt.DashboardRqtPlugin",
-        "console":    f"konsole --title {KONSOLE_TITLE} -e bash -c 'while true; do ssh {MAX_USER}@{MAX_IP} -t \"sleep 5; tmux new -A -s spot_session\"; sleep 5; done'",
-        "estop":      f"rqt --force-discover --perspective-file {estop_unique} --lock-perspective",
-        "rviz2":      "rviz2",
-        "controller": "ros2 launch spot_driver_plus controller_launch.py",
+        "dashboard":     "ros2 run rqt_gui rqt_gui --standalone alert_dashboard_rqt.alert_dashboard_rqt.DashboardRqtPlugin",
+        "console":       f"konsole --title {KONSOLE_TITLE} -e bash -c 'while true; do ssh {MAX_USER}@{MAX_IP} -t \"sleep 5; tmux new -A -s spot_session\"; sleep 5; done'",
+        "estop":         f"rqt --force-discover --perspective-file {estop_unique} --lock-perspective",
+        "rviz2":         "rviz2",
+        "controller":    "ros2 launch spot_driver_plus controller_launch.py",
+        "audio_capture": "ros2 run audio_capture audio_capture_node --ros-args -p format:=wave -r __ns:=/operator",
+        "audio_play":    "ros2 run audio_play audio_play_node --ros-args -p format:=wave -r __ns:=/nuc",
     }
 
     for i, (win_key, cmd) in enumerate(commands.items()):
